@@ -22,10 +22,13 @@ docker run -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elas
 ```
 git clone https://github.com/gbif/pipelines-workshop
 mvn clean package install -U -DskipTests
+```
+4. Run a Pipeline
+
+```
 java -jar pipelines-workshop-1.0-SNAPSHOT-shaded.jar --targetPath=/Users/xrc439/dev/gbif/pipelines-workshop/out --inputPath=
 /pipelines-workshop/src/main/resources/dwca-usac_mammals-v8.1.zip  --tempLocation=temp --esHosts=http://localhost:9200  --esIndexName=occurrence 
 ```
-
 Note: delete the Elasticsearch each time you run this example ```curl -X DELETE "localhost:9200/occurrence"```
 
 
