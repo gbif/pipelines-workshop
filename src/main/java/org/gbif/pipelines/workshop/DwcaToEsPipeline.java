@@ -52,7 +52,6 @@ public class DwcaToEsPipeline {
 
   public static void run(DwcaPipelineOptions options) {
 
-
     EsIndexUtils.createIndex(options);
 
     LOG.info("Adding step 1: Options");

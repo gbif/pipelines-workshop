@@ -52,8 +52,6 @@ public class DwcaToEsServicelessPipeline {
     EsIndexUtils.createIndex(options);
 
     LOG.info("Adding step 1: Options");
-    KvConfig kvConfig = KvConfigFactory.create(options.getGbifApiUrl(), options.getZookeeperUrl());
-
     final TupleTag<ExtendedRecord> erTag = new TupleTag<ExtendedRecord>() {};
     final TupleTag<BasicRecord> brTag = new TupleTag<BasicRecord>() {};
     final TupleTag<TemporalRecord> trTag = new TupleTag<TemporalRecord>() {};
