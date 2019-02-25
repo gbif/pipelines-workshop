@@ -11,8 +11,6 @@ import org.gbif.pipelines.io.avro.BasicRecord;
 import org.gbif.pipelines.io.avro.ExtendedRecord;
 import org.gbif.pipelines.io.avro.MultimediaRecord;
 import org.gbif.pipelines.io.avro.TemporalRecord;
-import org.gbif.pipelines.parsers.config.KvConfig;
-import org.gbif.pipelines.parsers.config.KvConfigFactory;
 import org.gbif.pipelines.transforms.core.BasicTransform;
 import org.gbif.pipelines.transforms.core.TemporalTransform;
 import org.gbif.pipelines.transforms.core.VerbatimTransform;
