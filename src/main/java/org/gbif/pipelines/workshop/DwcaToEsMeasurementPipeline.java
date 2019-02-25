@@ -1,5 +1,7 @@
 package org.gbif.pipelines.workshop;
 
+import java.nio.file.Paths;
+
 import org.gbif.pipelines.common.PipelinesVariables.Pipeline.Indexing;
 import org.gbif.pipelines.common.beam.DwcaIO;
 import org.gbif.pipelines.core.converters.GbifJsonConverter;
@@ -10,19 +12,20 @@ import org.gbif.pipelines.ingest.utils.FsUtils;
 import org.gbif.pipelines.io.avro.BasicRecord;
 import org.gbif.pipelines.io.avro.ExtendedRecord;
 import org.gbif.pipelines.io.avro.LocationRecord;
+import org.gbif.pipelines.io.avro.MeasurementOrFactRecord;
 import org.gbif.pipelines.io.avro.MultimediaRecord;
 import org.gbif.pipelines.io.avro.TaxonRecord;
 import org.gbif.pipelines.io.avro.TemporalRecord;
 import org.gbif.pipelines.parsers.config.KvConfig;
 import org.gbif.pipelines.parsers.config.KvConfigFactory;
-import org.gbif.pipelines.transforms.CoreTransforms;
-import org.gbif.pipelines.transforms.CoreTransforms.BasicFn;
-import org.gbif.pipelines.transforms.CoreTransforms.TemporalFn;
-import org.gbif.pipelines.transforms.ExtensionTransforms.MultimediaFn;
-import org.gbif.pipelines.transforms.MapTransforms;
 import org.gbif.pipelines.transforms.UniqueIdTransform;
-
-import java.nio.file.Paths;
+import org.gbif.pipelines.transforms.core.BasicTransform;
+import org.gbif.pipelines.transforms.core.LocationTransform;
+import org.gbif.pipelines.transforms.core.TaxonomyTransform;
+import org.gbif.pipelines.transforms.core.TemporalTransform;
+import org.gbif.pipelines.transforms.core.VerbatimTransform;
+import org.gbif.pipelines.transforms.extension.MultimediaTransform;
+import org.gbif.pipelines.transforms.extension.MeasurementOrFactTransform;
 
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
@@ -38,11 +41,11 @@ import org.apache.beam.sdk.values.TupleTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DwcaToEsFull {
+public class DwcaToEsMeasurementPipeline {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DwcaToEsFull.class);
+  private static final Logger LOG = LoggerFactory.getLogger(DwcaToEsMeasurementPipeline.class);
 
-  private DwcaToEsFull() {}
+  private DwcaToEsMeasurementPipeline() {}
 
   public static void main(String[] args) {
     DwcaPipelineOptions options = PipelinesOptionsFactory.create(DwcaPipelineOptions.class, args);
@@ -50,7 +53,6 @@ public class DwcaToEsFull {
   }
 
   public static void run(DwcaPipelineOptions options) {
-
 
     EsIndexUtils.createIndex(options);
 
@@ -63,16 +65,14 @@ public class DwcaToEsFull {
     final TupleTag<LocationRecord> lrTag = new TupleTag<LocationRecord>() {};
     final TupleTag<TaxonRecord> txrTag = new TupleTag<TaxonRecord>() {};
     final TupleTag<MultimediaRecord> mrTag = new TupleTag<MultimediaRecord>() {};
+    final TupleTag<MeasurementOrFactRecord> mfrTag = new TupleTag<MeasurementOrFactRecord>() {};
 
     String tmpDir = FsUtils.getTempDir(options);
 
     String inputPath = options.getInputPath();
-    boolean isDirectory = Paths.get(inputPath).toFile().isDirectory();
+    boolean isDir = Paths.get(inputPath).toFile().isDirectory();
 
-    DwcaIO.Read reader =
-        isDirectory
-            ? DwcaIO.Read.fromLocation(inputPath)
-            : DwcaIO.Read.fromCompressed(inputPath, tmpDir);
+    DwcaIO.Read reader = isDir ? DwcaIO.Read.fromLocation(inputPath) : DwcaIO.Read.fromCompressed(inputPath, tmpDir);
 
     Pipeline p = Pipeline.create(options);
 
@@ -82,34 +82,37 @@ public class DwcaToEsFull {
             .apply("Filter duplicates", UniqueIdTransform.create());
 
     PCollection<KV<String, ExtendedRecord>> verbatimCollection =
-        uniqueRecords.apply("Map Verbatim to KV", MapTransforms.extendedToKv());
+        uniqueRecords.apply("Map Verbatim to KV", VerbatimTransform.toKv());
 
     PCollection<KV<String, BasicRecord>> basicCollection =
         uniqueRecords
-            .apply("Interpret basic", ParDo.of(new BasicFn()))
-            .apply("Map Basic to KV", MapTransforms.basicToKv());
+            .apply("Interpret basic", ParDo.of(new BasicTransform.Interpreter()))
+            .apply("Map Basic to KV", BasicTransform.toKv());
 
     PCollection<KV<String, TemporalRecord>> temporalCollection =
         uniqueRecords
-            .apply("Interpret temporal", ParDo.of(new TemporalFn()))
-            .apply("Map Temporal to KV", MapTransforms.temporalToKv());
-
+            .apply("Interpret temporal", ParDo.of(new TemporalTransform.Interpreter()))
+            .apply("Map Temporal to KV", TemporalTransform.toKv());
 
     PCollection<KV<String, LocationRecord>> locationCollection =
         uniqueRecords
-            .apply("Interpret location", ParDo.of(new CoreTransforms.LocationFn(kvConfig)))
-            .apply("Map Location to KV", MapTransforms.locationToKv());
-
+            .apply("Interpret location", ParDo.of(new LocationTransform.Interpreter(kvConfig)))
+            .apply("Map Location to KV", LocationTransform.toKv());
 
     PCollection<KV<String, TaxonRecord>> taxonCollection =
         uniqueRecords
-            .apply("Interpret taxonomy", ParDo.of(new CoreTransforms.TaxonomyFn(kvConfig)))
-            .apply("Map Taxon to KV", MapTransforms.taxonToKv());
+            .apply("Interpret taxonomy", ParDo.of(new TaxonomyTransform.Interpreter(kvConfig)))
+            .apply("Map Taxon to KV", TaxonomyTransform.toKv());
 
     PCollection<KV<String, MultimediaRecord>> multimediaCollection =
         uniqueRecords
-            .apply("Interpret multimedia", ParDo.of(new MultimediaFn()))
-            .apply("Map Multimedia to KV", MapTransforms.multimediaToKv());
+            .apply("Interpret multimedia", ParDo.of(new MultimediaTransform.Interpreter()))
+            .apply("Map Multimedia to KV", MultimediaTransform.toKv());
+
+    PCollection<KV<String, MeasurementOrFactRecord>> measurementCollection =
+        uniqueRecords
+            .apply("Interpret measurement", ParDo.of(new MeasurementOrFactTransform.Interpreter()))
+            .apply("Map Measurement to KV", MeasurementOrFactTransform.toKv());
 
     LOG.info("Adding step 3: Converting to a json object");
     DoFn<KV<String, CoGbkResult>, String> doFn =
@@ -127,11 +130,11 @@ public class DwcaToEsFull {
             LocationRecord lr = v.getOnly(lrTag, LocationRecord.newBuilder().setId(k).build());
             TaxonRecord txr = v.getOnly(txrTag, TaxonRecord.newBuilder().setId(k).build());
             MultimediaRecord mr = v.getOnly(mrTag, MultimediaRecord.newBuilder().setId(k).build());
+            MeasurementOrFactRecord mfr = v.getOnly(mfrTag, MeasurementOrFactRecord.newBuilder().setId(k).build());
 
-            String json = GbifJsonConverter.create(br, tr, lr, txr, mr, er).buildJson().toString();
+            String json = GbifJsonConverter.create(br, tr, lr, txr, mr, mfr, er).buildJson().toString();
 
             c.output(json);
-
           }
         };
 
@@ -142,6 +145,7 @@ public class DwcaToEsFull {
             .and(lrTag, locationCollection)
             .and(txrTag, taxonCollection)
             .and(mrTag, multimediaCollection)
+            .and(mfrTag, measurementCollection)
             .and(erTag, verbatimCollection)
             .apply("Grouping objects", CoGroupByKey.create())
             .apply("Merging to json", ParDo.of(doFn));
