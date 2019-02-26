@@ -21,14 +21,29 @@ docker run -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elas
 
 ```
 git clone https://github.com/gbif/pipelines-workshop
-mvn clean package install -U -DskipTests
+mvn clean package install -DskipTests
 ```
 4. Run a Pipeline
 
+Pipeline without rest services:
 ```
-java -jar pipelines-workshop-1.0-SNAPSHOT-shaded.jar --targetPath=/Users/xrc439/dev/gbif/pipelines-workshop/out --inputPath=
-/pipelines-workshop/src/main/resources/dwca-usac_mammals-v8.1.zip  --tempLocation=temp --esHosts=http://localhost:9200  --esIndexName=occurrence 
+java -cp target/pipelines-workshop-1.0-SNAPSHOT-shaded.jar org.gbif.pipelines.workshop.DwcaToEsServicelessPipeline --inputPath=src/main/resources/measurement.zip --targetPath=target/ --esHosts=http://localhost:9200  --esIndexName=occurrence
 ```
+OR
+```
+java -jar target/pipelines-workshop-1.0-SNAPSHOT-shaded.jar --inputPath=src/main/resources/measurement.zip --targetPath=target/ --esHosts=http://localhost:9200  --esIndexName=occurrence
+```
+
+Pipeline with rest services:
+```
+java -cp target/pipelines-workshop-1.0-SNAPSHOT-shaded.jar org.gbif.pipelines.workshop.DwcaToEsPipeline --inputPath=src/main/resources/measurement.zip --targetPath=target/ --esHosts=http://localhost:9200  --esIndexName=occurrence
+```
+
+Pipeline with rest services and measurement extension:
+```
+java -cp target/pipelines-workshop-1.0-SNAPSHOT-shaded.jar org.gbif.pipelines.workshop.DwcaToEsMeasurementPipeline --inputPath=src/main/resources/measurement.zip --targetPath=target/ --esHosts=http://localhost:9200  --esIndexName=occurrence
+```
+
 Note: delete the Elasticsearch each time you run this example ```curl -X DELETE "http://localhost:9200/occurrence"```
 
 
