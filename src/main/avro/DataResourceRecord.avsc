@@ -1,0 +1,14 @@
+/**
+ * Represents the interpreted fields of terms related to location.
+ */
+{
+  "name":"DataResourceRecord",
+  "namespace":"org.gbif.pipelines.workshop.avro",
+  "type":"record",
+  "doc":"Additional information",
+  "fields":[
+    {"name": "id","type":"string"},
+    {"name": "dataResourceId","type":"string"},
+    {"name": "name","type":"string"}
+  ]
+}

@@ -15,6 +15,9 @@ import org.gbif.pipelines.io.avro.TaxonRecord;
 import org.gbif.pipelines.io.avro.TemporalRecord;
 import org.gbif.pipelines.parsers.config.KvConfig;
 import org.gbif.pipelines.parsers.config.KvConfigFactory;
+import org.gbif.pipelines.service.ClientFactory;
+import org.gbif.pipelines.service.DataResourceResponse;
+import org.gbif.pipelines.service.DataResourceService;
 import org.gbif.pipelines.transforms.core.BasicTransform;
 import org.gbif.pipelines.transforms.core.LocationTransform;
 import org.gbif.pipelines.transforms.core.TaxonomyTransform;
@@ -22,19 +25,25 @@ import org.gbif.pipelines.transforms.core.TemporalTransform;
 import org.gbif.pipelines.transforms.core.VerbatimTransform;
 import org.gbif.pipelines.transforms.extension.MultimediaTransform;
 import org.gbif.pipelines.transforms.UniqueIdTransform;
+import org.gbif.pipelines.workshop.avro.DataResourceRecord;
 
+import java.io.IOException;
 import java.nio.file.Paths;
+
 
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.io.elasticsearch.ElasticsearchIO;
+import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.View;
 import org.apache.beam.sdk.transforms.join.CoGbkResult;
 import org.apache.beam.sdk.transforms.join.CoGroupByKey;
 import org.apache.beam.sdk.transforms.join.KeyedPCollectionTuple;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.TupleTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +64,7 @@ public class DwcaToEsPipeline {
     EsIndexUtils.createIndex(options);
 
     LOG.info("Adding step 1: Options");
+
     KvConfig kvConfig = KvConfigFactory.create(options.getGbifApiUrl());
 
     final TupleTag<ExtendedRecord> erTag = new TupleTag<ExtendedRecord>() {};
@@ -77,6 +87,14 @@ public class DwcaToEsPipeline {
     Pipeline p = Pipeline.create(options);
 
     LOG.info("Reading avro files");
+
+    PCollectionView<DataResourceRecord> metadataView =
+        p.apply("Create metadata collection", Create.of(options.getDatasetId()))
+            .apply("Interpret metadata", ParDo.of(new DoFn<String, DataResourceRecord>() {
+                    DataResourceService dataResourceService = ClientFactory.createRetrofitClient("https://collections.ala.org.au/ws/",DataResourceService.class);
+            }))
+            .apply("Convert to view", View.asSingleton());
+
     PCollection<ExtendedRecord> uniqueRecords =
         p.apply("Read ExtendedRecords", reader)
             .apply("Filter duplicates", UniqueIdTransform.create());
@@ -110,6 +128,9 @@ public class DwcaToEsPipeline {
         uniqueRecords
             .apply("Interpret multimedia", ParDo.of(new MultimediaTransform.Interpreter()))
             .apply("Map Multimedia to KV", MultimediaTransform.toKv());
+
+
+
 
     LOG.info("Adding step 3: Converting to a json object");
     DoFn<KV<String, CoGbkResult>, String> doFn =
