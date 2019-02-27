@@ -34,6 +34,7 @@ import java.nio.file.Paths;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.io.elasticsearch.ElasticsearchIO;
+import org.apache.beam.sdk.transforms.Contextful;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -90,9 +91,9 @@ public class DwcaToEsPipeline {
 
     PCollectionView<DataResourceRecord> metadataView =
         p.apply("Create metadata collection", Create.of(options.getDatasetId()))
-            .apply("Interpret metadata", ParDo.of(new DoFn<String, DataResourceRecord>() {
-                    DataResourceService dataResourceService = ClientFactory.createRetrofitClient("https://collections.ala.org.au/ws/",DataResourceService.class);
-            }))
+            .apply("Interpret metadata", ParDo.of(
+                new DataResourceDoFn()
+            ))
             .apply("Convert to view", View.asSingleton());
 
     PCollection<ExtendedRecord> uniqueRecords =
@@ -142,6 +143,7 @@ public class DwcaToEsPipeline {
             CoGbkResult v = c.element().getValue();
             String k = c.element().getKey();
 
+            DataResourceRecord drr = c.sideInput(metadataView);
             ExtendedRecord er = v.getOnly(erTag, ExtendedRecord.newBuilder().setId(k).build());
             BasicRecord br = v.getOnly(brTag, BasicRecord.newBuilder().setId(k).build());
             TemporalRecord tr = v.getOnly(trTag, TemporalRecord.newBuilder().setId(k).build());
@@ -149,7 +151,7 @@ public class DwcaToEsPipeline {
             TaxonRecord txr = v.getOnly(txrTag, TaxonRecord.newBuilder().setId(k).build());
             MultimediaRecord mr = v.getOnly(mrTag, MultimediaRecord.newBuilder().setId(k).build());
 
-            String json = GbifJsonConverter.create(br, tr, lr, txr, mr, er).buildJson().toString();
+            String json = GbifJsonConverter.create(drr, br, tr, lr, txr, mr, er).buildJson().toString();
 
             c.output(json);
 
@@ -165,7 +167,7 @@ public class DwcaToEsPipeline {
             .and(mrTag, multimediaCollection)
             .and(erTag, verbatimCollection)
             .apply("Grouping objects", CoGroupByKey.create())
-            .apply("Merging to json", ParDo.of(doFn));
+            .apply("Merging to json", ParDo.of(doFn).withSideInputs(metadataView));
 
     LOG.info("Adding step 5: Elasticsearch indexing");
     ElasticsearchIO.ConnectionConfiguration esConfig =
